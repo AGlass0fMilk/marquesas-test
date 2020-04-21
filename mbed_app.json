@@ -1,0 +1,12 @@
+{
+    "target_overrides": {
+        "MARQ_CM7": {
+            "mbed-lvgl.horizontal_res": 800,
+            "mbed-lvgl.vertical_res": 480,
+            "mbed-lvgl.default_display_buffer_size": 320000,
+            "mbed-lvgl.color_depth": 32,
+            "mbed-lvgl.enable_filesystem": 0,
+            "mbed-lvgl.enable_font_roboto_28": 1
+        }
+    }
+}
