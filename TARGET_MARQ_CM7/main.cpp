@@ -3,6 +3,7 @@
  */
 
 #include "drivers/DigitalOut.h"
+#include "drivers/SPI.h"
 #include "rtos/ThisThread.h"
 #include "EasyScale.h"
 #include "CAN.h"
@@ -11,6 +12,10 @@
 
 #include "LittlevGL.h"
 #include "MarqDisplayDriver.hpp"
+
+#include "NCV7608/NCV7608.h"
+
+#include "PinNames.h"
 
 #include "lv_label.h"
 #include "lv_btn.h"
@@ -22,12 +27,27 @@
 
 #define DISPLAY_BUFFER_SIZE_PIXELS 384000 // (800*480)
 
+#define SPI_MOSI PB_5
+#define SPI_MISO PG_9
+#define SPI_SCLK PB_3
+
+#define CSB1 PG_14
+#define CSB2 PG_13
+#define CSB3 PD_4
+#define GPO_EN PD_3
+
 mbed::DigitalOut led1(LED1, 1);
 EasyScale bl_ctrl(PB_4);
 mbed::CAN can(PB_12, PB_13);
 mbed::DigitalOut disp_en(PG_1, 1);
+mbed::DigitalOut csb1(CSB1, 1);
+mbed::DigitalOut csb2(CSB2, 1);
 
 events::EventQueue main_queue;
+
+mbed::SPI ncv_spi(SPI_MOSI, SPI_MISO, SPI_SCLK);
+
+ep::NCV7608 ncv7608(ncv_spi, CSB3, GPO_EN);
 
 MarqDisplayDriver display(mbed::Span<lv_color_t>((lv_color_t*)EXTERNAL_RAM_BASE,
         DISPLAY_BUFFER_SIZE_PIXELS));
@@ -58,6 +78,47 @@ void create_gui(void) {
 
 }
 
+
+
+static int channel_num = 1;
+void cycle_hsls_channel(void) {
+
+    ep::NCV7608::ChannelOut channel = ncv7608.channel(channel_num);
+
+    // See if there's a fault
+    ep::NCV7608::fault_condition_t fault = channel.get_fault();
+    if(fault == ep::NCV7608::OVER_CURRENT) {
+        printf("ncv7608 [0x%X]: over current on channel %i!\r\n", (int)(&ncv7608), channel_num);
+    } else if(fault == ep::NCV7608::THERMAL_FAULT) {
+        printf("ncv7608 [0x%X]: thermal fault on channel %i\r\n", (int)(&ncv7608), channel_num);
+    }
+
+    // Turn current channel off
+    channel.off();
+
+    // Enable open load diagnostics on channel
+    channel.enable_open_load_diag();
+
+    rtos::ThisThread::sleep_for(1);
+
+    fault = channel.get_fault();
+    if(fault == ep::NCV7608::OPEN_LOAD) {
+        printf("ncv7608 [0x%X]: open load on channel %i!\r\n", (int)(&ncv7608), channel_num);
+    }
+
+    // Disable open load diagnostics on channel
+    channel.disable_open_load_diag();
+
+    channel_num++;
+    if(channel_num > 8) {
+        channel_num = 1;
+    }
+
+    // Turn next channel on
+    ncv7608.channel(channel_num).on();
+
+}
+
 int main(void) {
 
     volatile uint32_t* ext_mem_ptr = (uint32_t*) EXTERNAL_RAM_BASE;
@@ -70,11 +131,18 @@ int main(void) {
 //        count++;
 //    }
 
-    while((count-1) < (EXTERNAL_MEMORY_SIZE_BYTES >> 2)) {
-        *ext_mem_ptr = 0xFF000000;
-        ext_mem_ptr++;
-        count++;
-    }
+//    while((count-1) < (EXTERNAL_MEMORY_SIZE_BYTES >> 2)) {
+//        *ext_mem_ptr = 0xFF000000;
+//        ext_mem_ptr++;
+//        count++;
+//    }
+
+    printf("cm7: app start\r\n");
+
+    ncv_spi.format(16, 1);
+    ncv_spi.frequency(100E3);
+
+    ncv7608.enable();
 
     LittlevGL&  lvgl = LittlevGL::get_instance();
 
@@ -87,6 +155,8 @@ int main(void) {
     bl_ctrl.set_brightness(25, EasyScale::DEVICE_ADDRESS_TPS61165);
 
     main_queue.call_every(10, mbed::callback(&lvgl, &LittlevGL::update));
+
+    main_queue.call_every(500, cycle_hsls_channel);
 
     main_queue.dispatch_forever();
 
