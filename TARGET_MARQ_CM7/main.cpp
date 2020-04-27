@@ -14,6 +14,7 @@
 #include "MarqDisplayDriver.hpp"
 
 #include "NCV7608/NCV7608.h"
+#include "NCV7751/NCV7751.h"
 
 #include "PinNames.h"
 
@@ -48,6 +49,7 @@ events::EventQueue main_queue;
 mbed::SPI ncv_spi(SPI_MOSI, SPI_MISO, SPI_SCLK);
 
 ep::NCV7608 ncv7608(ncv_spi, CSB3, GPO_EN);
+ep::NCV7751 ncv7751(ncv_spi, CSB1, CSB2);
 
 MarqDisplayDriver display(mbed::Span<lv_color_t>((lv_color_t*)EXTERNAL_RAM_BASE,
         DISPLAY_BUFFER_SIZE_PIXELS));
@@ -119,6 +121,43 @@ void cycle_hsls_channel(void) {
 
 }
 
+static int channel_7751 = 1;
+void cycle_7751_channel(void) {
+
+    ep::NCV7751::ChannelOut channel = ncv7751.channel(channel_7751);
+
+    // See if there's a fault
+    ep::NCV7751::fault_condition_t fault = channel.get_fault();
+    if(fault == ep::NCV7751::OVER_LOAD) {
+        printf("ncv7751 [0x%X]: over load on channel %i!\r\n", (int)(&ncv7751), channel_7751);
+    }
+
+    // Turn current channel off
+    channel.off();
+
+    // Enable open load diagnostics on channel
+    channel.enable_open_load_diag();
+
+    rtos::ThisThread::sleep_for(1);
+
+    fault = channel.get_fault();
+    if(fault == ep::NCV7751::OPEN_LOAD) {
+        printf("ncv7751 [0x%X]: open load on channel %i!\r\n", (int)(&ncv7751), channel_7751);
+    }
+
+    // Disable open load diagnostics on channel
+    channel.disable_open_load_diag();
+
+    channel_7751++;
+    if(channel_7751 > 12) {
+        channel_7751 = 1;
+    }
+
+    // Turn next channel on
+    ncv7751.channel(channel_7751).on();
+
+}
+
 int main(void) {
 
     volatile uint32_t* ext_mem_ptr = (uint32_t*) EXTERNAL_RAM_BASE;
@@ -157,6 +196,7 @@ int main(void) {
     main_queue.call_every(10, mbed::callback(&lvgl, &LittlevGL::update));
 
     main_queue.call_every(500, cycle_hsls_channel);
+    main_queue.call_every(500, cycle_7751_channel);
 
     main_queue.dispatch_forever();
 
