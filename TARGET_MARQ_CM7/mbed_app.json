@@ -1,6 +1,13 @@
 {
     "target_overrides": {
         "MARQ_CM7": {
+            "target.components_add": [ "QSPIF" ],
+            "qspif.QSPI_IO0": "QSPI_IO0",
+            "qspif.QSPI_IO1": "QSPI_IO1",
+            "qspif.QSPI_IO2": "QSPI_IO2",
+            "qspif.QSPI_IO3": "QSPI_IO3",
+            "qspif.QSPI_SCK": "QSPI_SCK",
+            "qspif.QSPI_CSN": "QSPI_CSN",
             "mbed-lvgl.horizontal_res": 800,
             "mbed-lvgl.vertical_res": 480,
             "mbed-lvgl.default_display_buffer_size": 320000,

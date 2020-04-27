@@ -16,6 +16,8 @@
 #include "NCV7608/NCV7608.h"
 #include "NCV7751/NCV7751.h"
 
+#include "BlockDevice.h"
+
 #include "PinNames.h"
 
 #include "lv_label.h"
@@ -178,6 +180,10 @@ int main(void) {
 
     printf("cm7: app start\r\n");
 
+    mbed::BlockDevice* default_bd = mbed::BlockDevice::get_default_instance();
+    default_bd->init();
+    printf("storage: default block device size: %llu\r\n", default_bd->size());
+
     ncv_spi.format(16, 1);
     ncv_spi.frequency(100E3);
 
@@ -195,8 +201,8 @@ int main(void) {
 
     main_queue.call_every(10, mbed::callback(&lvgl, &LittlevGL::update));
 
-    main_queue.call_every(500, cycle_hsls_channel);
-    main_queue.call_every(500, cycle_7751_channel);
+//    main_queue.call_every(500, cycle_hsls_channel);
+//    main_queue.call_every(500, cycle_7751_channel);
 
     main_queue.dispatch_forever();
 
